@@ -1,0 +1,26 @@
+[general]
+name=CAD Text Extractor
+qgisMinimumVersion=3.22
+qgisMaximumVersion=3.99
+description=Export source vector geometries and selected attribute values as CAD text to an AutoCAD-compatible R12 ASCII DXF file.
+about=CAD Text Extractor writes source point, line, or polygon geometry to a SOURCE_FEATURES layer and places selected attribute values as TEXT entities on separate CAD layers.
+    The plugin produces a dependency-free AutoCAD R12 ASCII DXF file and includes two successful trial exports before activation is required. License activation uses the Ruang Spasial License Hub over HTTPS. No vector or CAD dataset is transmitted to the service.
+version=26.1.0
+author=Dwi Purwanto (RuangSpasial)
+email=ruangspasial@gmail.com
+changelog=26.1.0
+    Improved AutoCAD R12 DXF export for point, line, polygon, and multipart geometry.
+    Preserved selected attribute values as CAD text on separate layers.
+    Improved CAD layer-name handling and output validation.
+    Added sample data and clearer usage documentation.
+category=Vector
+tags=CAD,DXF,text,attributes,vector export,AutoCAD
+homepage=https://aktivasi.ruangspasial.my.id/help/cad-text-extractor-qgis
+tracker=https://github.com/purwantodwigeo10/CAD-Text-Extractor/issues
+repository=https://github.com/purwantodwigeo10/CAD-Text-Extractor
+license=GPL-3.0-or-later
+icon=icon.png
+experimental=False
+deprecated=False
+hasProcessingProvider=False
+server=False
