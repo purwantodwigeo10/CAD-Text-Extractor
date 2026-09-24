@@ -1,96 +1,47 @@
 # CAD Text Extractor
 
-CAD Text Extractor is a QGIS plugin that exports source vector geometry and
-selected attribute values to an AutoCAD-compatible R12 ASCII DXF file.
+CAD Text Extractor is a QGIS plugin for exporting source geometries and selected attribute fields to an AutoCAD-compatible DXF file.
 
-## Main workflow
+## Main features
 
-1. Load a point, line, or polygon vector layer in QGIS, or browse to a vector
-   dataset from the plugin.
-2. Select one or more attribute fields.
-3. Select the placement mode and an output `.dxf` path.
-4. Run the export.
-
-The output contains:
-
-- source geometry on the `SOURCE_FEATURES` CAD layer; and
-- one CAD text layer for each selected source field.
-
-Field order controls the text order. CAD layer names are sanitized, limited to
-31 characters for R12 compatibility, and made unique when necessary.
+- Exports point, line, and polygon geometries to DXF R12 ASCII.
+- Exports one or more selected attribute fields as CAD TEXT entities.
+- Supports centroid, inside-point, line-midpoint, and original-point placement.
+- Automatically adjusts polygon text height according to feature area.
+- Arranges multiple values vertically around the selected anchor point.
+- Uses Middle Center text alignment.
+- Displays export progress from 0 to 100 percent.
 
 ## Compatibility
 
-- QGIS 3.22 through 3.99
-- Windows, Linux, and macOS
-- AutoCAD R12 ASCII DXF with Windows CRLF line endings
-- no third-party Python packages or bundled binary files
-
-The writer supports point, line, polygon, multipart, and supported collection
-geometries. Curved geometry is converted to straight segments before export.
-The output retains the input coordinate values and DXF R12 does not store a
-coordinate reference system. A projected CRS with suitable map units is
-recommended for predictable text size and spacing.
-
-The current export settings use a text height of 20 map units and a spacing of
-0.5 map units between selected fields. The output is written to a temporary
-file, validated, and then moved atomically to the selected path.
+- QGIS 3.22 through QGIS 3.99.
+- Windows, Linux, and macOS where the supported QGIS version is available.
+- DXF R12 ASCII output for broad CAD compatibility.
 
 ## Installation
 
-1. Download the release ZIP from this repository's Releases page.
+1. Download the release ZIP.
 2. In QGIS, open **Plugins > Manage and Install Plugins**.
-3. Select **Install from ZIP**, choose the downloaded ZIP, and install it.
-4. Open **Vector > RUANG SPASIAL > CAD Text Extractor** or use its toolbar
-   icon.
+3. Select **Install from ZIP**.
+4. Choose the downloaded ZIP and install it.
+5. Enable **CAD Text Extractor** if it is not enabled automatically.
 
-For development, copy the `cad_text_extractor_cte` directory to the active
-QGIS profile's `python/plugins` directory, then restart QGIS.
+## Basic use
 
-## Quick test
+1. Open CAD Text Extractor from the Vector menu or its toolbar button.
+2. Select a vector layer already loaded in QGIS, or browse to vector data.
+3. Select the attribute fields to export.
+4. Choose the placement mode.
+5. Select an output `.dxf` file.
+6. Run the export and wait until progress reaches 100 percent.
 
-The `sample_data` directory contains a small synthetic polygon dataset in
-EPSG:32750. Load `polygons.geojson`, select `parcel_id`, `owner`, and
-`land_use`, then export it to DXF. See `sample_data/README.md` for the expected
-result.
+## Support
 
-## Activation and network access
-
-The plugin may be used for two successful trial exports. Trial use is recorded
-only after a valid DXF is created. Continued use requires activation through
-RUANG SPASIAL License Hub.
-
-- Product code: `CDTER`
-- Fixed code: `SMI`
-- Request page: <https://aktivasi.ruangspasial.my.id/request>
-- User guide: <https://aktivasi.ruangspasial.my.id/help/cad-text-extractor-qgis>
-
-License activation uses the RUANG SPASIAL License Hub over HTTPS. An activated
-license is checked with License Hub before an export.
-
-## Privacy
-
-For activation and license-status checks, the plugin sends the product code,
-fixed code, product name, activation code, and a Device ID to RUANG SPASIAL
-License Hub. The Device ID is the first 32 uppercase characters of a SHA-256
-hash derived from a stable machine identifier; the raw machine identifier is
-not transmitted. Local license and trial state is stored in the current user's
-application-data directory. The plugin does not transmit vector geometries,
-attribute values, or DXF output.
-
-## Support and issues
-
-- User support: <https://aktivasi.ruangspasial.my.id/help/cad-text-extractor-qgis>
-- Bug reports: <https://github.com/purwantodwigeo10/CAD-Text-Extractor/issues>
-- Source code: <https://github.com/purwantodwigeo10/CAD-Text-Extractor>
-
-Please include the QGIS version, operating system, input geometry type, steps
-to reproduce, and the exact error message in a bug report. Do not include
-activation codes or private datasets.
+- User guide and activation: https://aktivasi.ruangspasial.my.id/help/cad-text-extractor-qgis
+- Issue tracker: https://github.com/purwantodwigeo10/CAD-Text-Extractor/issues
 
 ## License
 
-Copyright (C) 2026 Dwi Purwanto / RuangSpasial.
+This project is licensed under the GNU General Public License v3.0 or later. See `LICENSE` for details.
 
-This plugin is free software licensed under the GNU General Public License,
-version 3 or any later version. See [LICENSE](LICENSE).
+Copyright (C) 2026 Dwi Purwanto (Ruang Spasial).
