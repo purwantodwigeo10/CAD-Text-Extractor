@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# SPDX-License-Identifier: GPL-3.0-or-later
 """Conservative ASCII DXF writer for maximum AutoCAD compatibility.
 
 The file intentionally contains only the ENTITIES section documented by
@@ -26,16 +25,13 @@ class SimpleDxfWriter(object):
 
     def add_layer(self, name, color=7):
         # Minimal DXF files may reference a layer without a LAYER table.
-        # AutoCAD creates it automatically with color 7 and CONTINUOUS
-        # linetype.
+        # AutoCAD creates it automatically with color 7 and CONTINUOUS linetype.
         self.layers.add(str(name or '0'))
 
     def _safe_number(self, value):
         number = float(value)
         if not math.isfinite(number):
-            raise ValueError(
-                'DXF coordinate is not a finite number: %r' %
-                value)
+            raise ValueError('DXF coordinate is not a finite number: %r' % value)
         return format(number, '.15g')
 
     def _safe_text(self, value):
@@ -58,21 +54,14 @@ class SimpleDxfWriter(object):
             raise RuntimeError('DXF writer is not open.')
         code_text = str(code)
         value_text = str(value)
-        if (
-            '\n' in code_text
-            or '\r' in code_text
-            or '\n' in value_text
-            or '\r' in value_text
-        ):
-            raise ValueError(
-                'A DXF group code and value must each occupy one line.')
+        if '\n' in code_text or '\r' in code_text or '\n' in value_text or '\r' in value_text:
+            raise ValueError('A DXF group code and value must each occupy one line.')
         self.f.write(code_text + '\n')
         self.f.write(value_text + '\n')
 
     def _require_open(self):
         if not self._started or self.f is None:
-            raise RuntimeError(
-                'DXF writer must be started before adding entities.')
+            raise RuntimeError('DXF writer must be started before adding entities.')
         if self._ended:
             raise RuntimeError('DXF writer has already been finalized.')
 
@@ -126,11 +115,18 @@ class SimpleDxfWriter(object):
         self._write_pair(40, self._safe_number(height))
         self._write_pair(1, safe_text)
         self._write_pair(50, self._safe_number(angle))
+        # R12 TEXT alignment: horizontal center + vertical middle.  The second
+        # alignment point is the selected centroid/inside/midpoint/point anchor.
+        self._write_pair(72, 1)
+        self._write_pair(73, 2)
+        self._write_pair(11, self._safe_number(x))
+        self._write_pair(21, self._safe_number(y))
+        self._write_pair(31, 0.0)
         self._entity_count += 1
 
     def add_lwpolyline(self, points, layer, closed=False):
-        # Old-style POLYLINE is used instead of LWPOLYLINE. It keeps each
-        # source ring/line connected while remaining compatible with R12.
+        # Old-style POLYLINE is used instead of LWPOLYLINE. It keeps each source
+        # ring/line connected while remaining compatible with AutoCAD R12.
         if not points:
             return
         vertices = list(points)
@@ -141,11 +137,7 @@ class SimpleDxfWriter(object):
         if closed and len(vertices) > 2:
             first = vertices[0]
             last = vertices[-1]
-            if float(
-                first.x()) != float(
-                last.x()) or float(
-                first.y()) != float(
-                    last.y()):
+            if float(first.x()) != float(last.x()) or float(first.y()) != float(last.y()):
                 # Keep an explicit closing vertex as well as flag 70 = 1.
                 # Some non-Autodesk viewers ignore the closed flag alone.
                 vertices.append(first)
@@ -174,7 +166,10 @@ class SimpleDxfWriter(object):
             return
         try:
             working = QgsGeometry(geom)
-            working.convertToStraightSegment()
+            try:
+                working.convertToStraightSegment()
+            except Exception:
+                pass
 
             wkb = working.wkbType()
             geom_type = QgsWkbTypes.geometryType(wkb)
@@ -194,8 +189,7 @@ class SimpleDxfWriter(object):
                     for line in working.asMultiPolyline():
                         self.add_lwpolyline(line, layer, closed=False)
                 else:
-                    self.add_lwpolyline(
-                        working.asPolyline(), layer, closed=False)
+                    self.add_lwpolyline(working.asPolyline(), layer, closed=False)
                 return
 
             if geom_type == QgsWkbTypes.PolygonGeometry:
@@ -212,16 +206,12 @@ class SimpleDxfWriter(object):
             for part in working.asGeometryCollection():
                 self.add_geometry(part, layer)
         except Exception as exc:
-            raise RuntimeError(
-                'A source geometry could not be converted to DXF: %s' %
-                exc)
+            raise RuntimeError('A source geometry could not be converted to DXF: %s' % exc)
 
     def end(self):
         self._require_open()
         if self._entity_count == 0:
-            raise RuntimeError(
-                'No valid geometry or text entities were produced for the '
-                'DXF output.')
+            raise RuntimeError('No valid geometry or text entities were produced for the DXF output.')
         self._write_pair(0, 'ENDSEC')
         self._write_pair(0, 'EOF')
         self.f.close()
@@ -232,10 +222,9 @@ class SimpleDxfWriter(object):
         if self.f is not None:
             try:
                 self.f.close()
-            except OSError:
-                self.f = None
-            else:
-                self.f = None
+            except Exception:
+                pass
+            self.f = None
 
     @staticmethod
     def validate_file(path):
@@ -244,15 +233,12 @@ class SimpleDxfWriter(object):
         with open(path, 'r', encoding='ascii') as stream:
             lines = [line.rstrip('\r\n') for line in stream]
         if len(lines) % 2 != 0:
-            raise RuntimeError(
-                'Invalid DXF structure: group-code pairs are incomplete.')
+            raise RuntimeError('Invalid DXF structure: group-code pairs are incomplete.')
         pairs = list(zip(lines[0::2], lines[1::2]))
         if pairs[:2] != [('0', 'SECTION'), ('2', 'ENTITIES')]:
-            raise RuntimeError(
-                'Invalid DXF structure: ENTITIES section is missing.')
+            raise RuntimeError('Invalid DXF structure: ENTITIES section is missing.')
         if pairs[-2:] != [('0', 'ENDSEC'), ('0', 'EOF')]:
-            raise RuntimeError(
-                'Invalid DXF structure: ENDSEC or EOF marker is missing.')
+            raise RuntimeError('Invalid DXF structure: ENDSEC or EOF marker is missing.')
 
         entity_requirements = {
             'LINE': {'8', '10', '20', '11', '21'},
@@ -260,7 +246,9 @@ class SimpleDxfWriter(object):
             'VERTEX': {'8', '10', '20', '70'},
             'SEQEND': {'8'},
             'POINT': {'8', '10', '20'},
-            'TEXT': {'8', '10', '20', '40', '1'},
+            'TEXT': {
+                '8', '10', '20', '40', '1', '72', '73', '11', '21'
+            },
         }
         records = []
         current = None
@@ -292,6 +280,4 @@ class SimpleDxfWriter(object):
                     (entity_name, ', '.join(sorted(missing)))
                 )
         if entity_count == 0:
-            raise RuntimeError(
-                'DXF output contains no readable POLYLINE, LINE, POINT, or '
-                'TEXT entities.')
+            raise RuntimeError('DXF output contains no readable POLYLINE, LINE, POINT, or TEXT entities.')

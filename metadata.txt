@@ -1,26 +1,22 @@
 [general]
 name=CAD Text Extractor
 qgisMinimumVersion=3.22
-qgisMaximumVersion=3.99
-description=Export source vector geometries and selected attribute values as CAD text to an AutoCAD-compatible R12 ASCII DXF file.
-about=CAD Text Extractor writes source point, line, or polygon geometry to a SOURCE_FEATURES layer and places selected attribute values as TEXT entities on separate CAD layers.
-    The plugin produces a dependency-free AutoCAD R12 ASCII DXF file and includes two successful trial exports before activation is required. License activation uses the Ruang Spasial License Hub over HTTPS. No vector or CAD dataset is transmitted to the service.
-version=26.1.0
-author=Dwi Purwanto (RuangSpasial)
-email=ruangspasial@gmail.com
-changelog=26.1.0
-    Improved AutoCAD R12 DXF export for point, line, polygon, and multipart geometry.
-    Preserved selected attribute values as CAD text on separate layers.
-    Improved CAD layer-name handling and output validation.
-    Added sample data and clearer usage documentation.
+description=CAD Text Extractor exports selected attribute fields as CAD text and source geometries into a CAD-compatible DXF output.
+version=0.26.01
+author=Dwi Purwanto (Ruang Spasial)
+email=
+about=CAD Text Extractor exports source geometries and selected attribute fields to an AutoCAD-compatible DXF file. Polygon text height is assigned automatically from feature area, while multiple text values are stacked around the selected placement point using Middle Center alignment. Live progress from 0 to 100 percent is displayed during export.
+changelog=0.26.01
+    - Exports source geometries and selected attributes as CAD-compatible DXF entities.
+    - Assigns compact polygon text heights automatically from 2 to 7 according to feature area in square metres.
+    - Places multiple text values above, at, and below the selected anchor point without stacking them on the same position.
+    - Uses a vertical gap equal to half of the applicable text height.
+    - Supports centroid, inside-point, line-midpoint, and original-point placement modes.
+    - Aligns every text row to Middle Center on the selected placement point.
+    - Displays live export progress from 0 to 100 percent.
 category=Vector
-tags=CAD,DXF,text,attributes,vector export,AutoCAD
-homepage=https://aktivasi.ruangspasial.my.id/help/cad-text-extractor-qgis
-tracker=https://github.com/purwantodwigeo10/CAD-Text-Extractor/issues
-repository=https://github.com/purwantodwigeo10/CAD-Text-Extractor
-license=GPL-3.0-or-later
 icon=icon.png
 experimental=False
 deprecated=False
-hasProcessingProvider=False
-server=False
+tracker=
+repository=

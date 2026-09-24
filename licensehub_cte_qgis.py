@@ -1,467 +1,263 @@
 # -*- coding: utf-8 -*-
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""RUANG SPASIAL License Hub integration for CAD Text Extractor.
-
-All remote license operations use HTTPS through QGIS' network manager so QGIS
-proxy and certificate settings are respected.
-"""
-
-import hashlib
-import json
+"""RUANG SPASIAL License Hub module for CAD Text Extractor QGIS."""
 import os
-import platform
-import sys
-import uuid
+import json
+import hashlib
 import webbrowser
 
 try:
     import winreg
-except ImportError:  # Non-Windows platforms
+except Exception:
     winreg = None
 
-from urllib.parse import urlencode, urlparse
-
 try:
-    from qgis.PyQt.QtCore import QByteArray, QEventLoop, QSysInfo, QTimer, QUrl
-    from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
-    from qgis.core import QgsNetworkAccessManager
-except ImportError:  # Allows safe checks outside QGIS
-    QByteArray = None
-    QEventLoop = None
-    QSysInfo = None
-    QTimer = None
-    QUrl = None
-    QNetworkReply = None
-    QNetworkRequest = None
-    QgsNetworkAccessManager = None
+    from urllib.request import Request, urlopen
+    from urllib.parse import urlencode
+except Exception:
+    Request = None
+    urlopen = None
+    urlencode = None
 
-
-BASE_URL = "https://aktivasi.ruangspasial.my.id"
-REQUEST_URL = BASE_URL + "/request"
-VALIDATE_URL = BASE_URL + "/api/license/validate"
-STATUS_URL = BASE_URL + "/api/license/status"
-
-PRODUCT_CODE = "CDTER"
-FIXED_CODE = "SMI"
-PRODUCT_NAME = "CAD Text Extractor"
-PLUGIN_VERSION = "26.1.0"
+REQUEST_URL = 'https://aktivasi.ruangspasial.my.id/request'
+PRODUCT_CODE = 'CDTER'
+FIXED_CODE = 'SMI'
+PRODUCT_NAME = 'CAD Text Extractor'
 TRIAL_LIMIT = 2
-LICENSE_FOLDER = "CAD_TEXT_EXTRACTOR_QGIS_CDTER_SMI"
-
+LICENSE_FOLDER = 'CAD_TEXT_EXTRACTOR_QGIS_CDTER_SMI'
 
 class LicenseManager(object):
-    """Store local trial state and validate activated licenses."""
-
     def __init__(self):
-        self.app_dir = os.path.join(
-            self._application_data_root(),
-            "RuangSpasial",
-            "LicenseHub",
-            LICENSE_FOLDER,
-        )
-        os.makedirs(self.app_dir, exist_ok=True)
-        self.license_file = os.path.join(self.app_dir, "license.json")
-        self.seed_file = os.path.join(self.app_dir, "device_seed")
+        appdata = os.environ.get('APPDATA', os.path.expanduser('~'))
+        self.app_dir = os.path.join(appdata, 'RuangSpasial', 'LicenseHub', LICENSE_FOLDER)
+        if not os.path.isdir(self.app_dir):
+            os.makedirs(self.app_dir)
+        self.license_file = os.path.join(self.app_dir, 'license.json')
 
-    @staticmethod
-    def _application_data_root():
-        """Return a writable per-user data directory on supported platforms."""
-        if os.name == "nt":
-            return os.environ.get("APPDATA") or os.path.expanduser("~")
-        if sys.platform == "darwin":
-            return os.path.expanduser("~/Library/Application Support")
-        return os.environ.get(
-            "XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-
-    @staticmethod
-    def _read_machine_guid():
-        """Preserve the existing Windows Device ID source for compatibility."""
+    def _read_machine_guid(self):
         if winreg is None:
-            return ""
+            return ''
         try:
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Cryptography",
-            )
-            try:
-                value, _ = winreg.QueryValueEx(key, "MachineGuid")
-            finally:
-                winreg.CloseKey(key)
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Microsoft\Cryptography')
+            value, _ = winreg.QueryValueEx(key, 'MachineGuid')
+            winreg.CloseKey(key)
             return str(value).strip()
-        except (OSError, ValueError):
-            return ""
-
-    @staticmethod
-    def _read_qt_machine_id():
-        if QSysInfo is None:
-            return ""
-        try:
-            value = QSysInfo.machineUniqueId()
-            return bytes(value).decode("utf-8", errors="ignore").strip()
-        except (AttributeError, TypeError, ValueError):
-            return ""
-
-    @staticmethod
-    def _read_linux_machine_id():
-        for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    value = handle.read().strip()
-                if value:
-                    return value
-            except (OSError, UnicodeError):
-                continue
-        return ""
-
-    def _read_or_create_local_seed(self):
-        """Use a persistent random fallback instead of a shared constant ID."""
-        try:
-            with open(self.seed_file, "r", encoding="ascii") as handle:
-                value = handle.read().strip()
-            if value:
-                return value
-        except (OSError, UnicodeError):
-            value = ""
-
-        value = uuid.uuid4().hex
-        temporary = self.seed_file + ".tmp"
-        try:
-            with open(temporary, "w", encoding="ascii") as handle:
-                handle.write(value)
-            os.replace(temporary, self.seed_file)
-            try:
-                os.chmod(self.seed_file, 0o600)
-            except OSError:
-                return value
-        except OSError:
-            try:
-                if os.path.exists(temporary):
-                    os.remove(temporary)
-            except OSError:
-                temporary = ""
-            return "%s|%s" % (platform.node(), uuid.getnode())
-        return value
+        except Exception:
+            return ''
 
     def get_device_id(self):
-        # Windows continues to use MachineGuid, so existing licenses remain
-        # valid.
-        raw = (
-            self._read_machine_guid()
-            or self._read_qt_machine_id()
-            or self._read_linux_machine_id()
-            or self._read_or_create_local_seed()
-        )
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest().upper()[:32]
+        raw = self._read_machine_guid() or 'RUANG_SPASIAL_DEVICE_UNKNOWN'
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest().upper()[:32]
 
     def _default_state(self):
         return {
-            "product_code": PRODUCT_CODE,
-            "fixed_code": FIXED_CODE,
-            "activated": False,
-            "activation_code": "",
-            "trial_used": 0,
-            "last_status": "TRIAL",
-            "device_id": self.get_device_id(),
+            'product_code': PRODUCT_CODE,
+            'fixed_code': FIXED_CODE,
+            'activated': False,
+            'activation_code': '',
+            'trial_used': 0,
+            'last_status': 'TRIAL',
+            'device_id': self.get_device_id()
         }
 
     def load_state(self):
         if not os.path.exists(self.license_file):
             return self._default_state()
         try:
-            with open(self.license_file, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-            if not isinstance(data, dict):
-                data = self._default_state()
-        except (OSError, ValueError, TypeError):
+            with open(self.license_file, 'r') as f:
+                data = json.load(f)
+        except Exception:
             data = self._default_state()
-
-        for key, value in self._default_state().items():
-            data.setdefault(key, value)
-        data["product_code"] = PRODUCT_CODE
-        data["fixed_code"] = FIXED_CODE
-        data["device_id"] = self.get_device_id()
+        for k, v in self._default_state().items():
+            data.setdefault(k, v)
+        data['product_code'] = PRODUCT_CODE
+        data['fixed_code'] = FIXED_CODE
+        data['device_id'] = self.get_device_id()
         return data
 
     def save_state(self, state):
-        state["product_code"] = PRODUCT_CODE
-        state["fixed_code"] = FIXED_CODE
-        state["device_id"] = self.get_device_id()
-        temporary = self.license_file + ".tmp"
-        try:
-            with open(temporary, "w", encoding="utf-8") as handle:
-                json.dump(state, handle, indent=2, sort_keys=True)
-            os.replace(temporary, self.license_file)
-            try:
-                os.chmod(self.license_file, 0o600)
-            except OSError:
-                return
-        except OSError:
-            try:
-                if os.path.exists(temporary):
-                    os.remove(temporary)
-            except OSError:
-                temporary = ""
-            raise
+        state['product_code'] = PRODUCT_CODE
+        state['fixed_code'] = FIXED_CODE
+        state['device_id'] = self.get_device_id()
+        with open(self.license_file, 'w') as f:
+            json.dump(state, f, indent=2)
 
     def trial_remaining(self):
         state = self.load_state()
         try:
-            used = int(state.get("trial_used", 0))
-        except (TypeError, ValueError):
+            used = int(state.get('trial_used', 0))
+        except Exception:
             used = 0
         return max(0, TRIAL_LIMIT - used)
 
     def is_activated_local(self):
-        state = self.load_state()
-        return (
-            bool(state.get("activated", False))
-            and bool(str(state.get("activation_code", "")).strip())
-            and str(state.get("product_code", "")).upper() == PRODUCT_CODE
-            and str(state.get("fixed_code", "")).upper() == FIXED_CODE
-        )
+        s = self.load_state()
+        return bool(s.get('activated', False)) and bool(str(s.get('activation_code', '')).strip()) and \
+               str(s.get('product_code', '')).upper() == PRODUCT_CODE and str(s.get('fixed_code', '')).upper() == FIXED_CODE
 
     def status_text(self):
-        state = self.load_state()
+        s = self.load_state()
         if self.is_activated_local():
-            return "Active"
-        status = str(state.get("last_status", "")).upper()
-        if status in ("BLOCKED", "DEACTIVATED", "REVOKED", "INACTIVE_SERVER"):
-            return "Deactivated - License is not active"
-        remaining = self.trial_remaining()
-        if remaining > 0:
-            return "Trial - %s of %s uses remaining" % (remaining, TRIAL_LIMIT)
-        return "Expired - Trial limit reached"
+            return 'Active - Product %s / Fixed Code %s - Device ID: %s' % (PRODUCT_CODE, FIXED_CODE, self.get_device_id())
+        st = str(s.get('last_status', '')).upper()
+        if st in ('BLOCKED', 'DEACTIVATED', 'REVOKED', 'INACTIVE_SERVER'):
+            return 'Deactivated - License is not active'
+        rem = self.trial_remaining()
+        if rem > 0:
+            return 'Trial - %s of %s uses remaining' % (rem, TRIAL_LIMIT)
+        return 'Expired - Trial limit reached'
 
     def request_url(self):
         params = {
-            "device_id": self.get_device_id(),
-            "plugin": PRODUCT_CODE,
-            "product_code": PRODUCT_CODE,
-            "fixed_code": FIXED_CODE,
-            "product_name": PRODUCT_NAME,
+            'device_id': self.get_device_id(),
+            'plugin': PRODUCT_CODE,
+            'product_code': PRODUCT_CODE,
+            'fixed_code': FIXED_CODE,
+            'product_name': PRODUCT_NAME
         }
-        return REQUEST_URL + "?" + urlencode(params)
+        if urlencode is None:
+            return REQUEST_URL + '?device_id=' + self.get_device_id() + '&plugin=' + PRODUCT_CODE + '&product_code=' + PRODUCT_CODE + '&fixed_code=' + FIXED_CODE
+        return REQUEST_URL + '?' + urlencode(params)
 
     def open_request_url(self):
-        return webbrowser.open(self.request_url())
+        webbrowser.open(self.request_url())
 
-    @staticmethod
-    def _secure_url(url):
-        if urlparse is None:
-            return False
+    def _post_json(self, url, payload, timeout=8):
+        if Request is None or urlopen is None:
+            return None, 'HTTP client is not available.'
         try:
-            parsed = urlparse(url)
-        except ValueError:
-            return False
-        return (
-            parsed.scheme.lower() == "https"
-            and parsed.hostname == "aktivasi.ruangspasial.my.id"
-        )
+            data = json.dumps(payload).encode('utf-8')
+            req = Request(url, data=data, headers={'Content-Type': 'application/json'})
+            with urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode('utf-8', errors='ignore')
+            try:
+                return json.loads(raw), None
+            except Exception:
+                return {'raw': raw}, None
+        except Exception as e:
+            return None, str(e)
 
-    @staticmethod
-    def _decode_response(raw):
-        try:
-            value = json.loads(raw)
-        except (TypeError, ValueError):
-            return None
-        return value if isinstance(value, dict) else None
-
-    def _post_json_qgis(self, url, payload, timeout):
-        request = QNetworkRequest(QUrl(url))
-        request.setHeader(
-            QNetworkRequest.ContentTypeHeader,
-            "application/json")
-        request.setRawHeader(
-            QByteArray(b"Accept"),
-            QByteArray(b"application/json"))
-        request.setRawHeader(
-            QByteArray(b"User-Agent"),
-            QByteArray(
-                ("CADTextExtractor/%s QGIS" %
-                 PLUGIN_VERSION).encode("ascii")),
-        )
-
-        reply = QgsNetworkAccessManager.instance().post(
-            request,
-            QByteArray(json.dumps(payload).encode("utf-8")),
-        )
-        event_loop = QEventLoop()
-        timer = QTimer()
-        timer.setSingleShot(True)
-        reply.finished.connect(event_loop.quit)
-        timer.timeout.connect(event_loop.quit)
-        timer.start(max(1, int(timeout * 1000)))
-        event_loop.exec_()
-
-        if not reply.isFinished():
-            reply.abort()
-            reply.deleteLater()
-            return None, "License Hub did not respond before the timeout."
-
-        raw = bytes(reply.readAll()).decode("utf-8", errors="replace")
-        error_code = reply.error()
-        error_text = reply.errorString()
-        reply.deleteLater()
-        parsed = self._decode_response(raw)
-        if parsed is not None:
-            return parsed, None
-        if error_code != QNetworkReply.NoError:
-            return None, "License Hub request failed: %s" % error_text
-        return None, "License Hub returned an invalid response."
-
-    def _post_json(self, url, payload, timeout=10):
-        if not self._secure_url(url):
-            return None, (
-                "The license request was blocked because its endpoint is not "
-                "HTTPS."
-            )
-        if QgsNetworkAccessManager is None:
-            return None, "QGIS network manager is not available."
-        return self._post_json_qgis(url, payload, timeout)
-
-    @staticmethod
-    def _status_from_response(data):
+    def _status_from_response(self, data):
         if not isinstance(data, dict):
-            return None, "Invalid License Hub response."
-
-        status = str(
-            data.get("status")
-            or data.get("license_status")
-            or data.get("message")
-            or ""
-        ).strip().upper()
-        message = data.get("message") or ""
-        if (
-            data.get("active") is True
-            or data.get("approved") is True
-            or data.get("valid") is True
-            or status in ("ACTIVE", "AKTIF", "APPROVED", "VALID")
-        ):
-            return True, message or "License active."
-        if status == "PENDING":
-            return False, message or "License request is still pending."
-        if (
-            data.get("active") is False
-            or data.get("approved") is False
-            or data.get("valid") is False
-            or status
-            in (
-                "BLOCKED",
-                "DEACTIVATED",
-                "INACTIVE",
-                "REVOKED",
-                "REJECTED",
-                "EXPIRED",
-                "NOT_FOUND",
-            )
-        ):
-            return False, message or "License is not active."
-        return None, message or "License status could not be verified."
-
-    def _license_payload(self, activation_code):
-        return {
-            "product": PRODUCT_CODE,
-            "product_code": PRODUCT_CODE,
-            "fixed_code": FIXED_CODE,
-            "product_name": PRODUCT_NAME,
-            "plugin": PRODUCT_CODE,
-            "tool": PRODUCT_NAME,
-            "device_id": self.get_device_id(),
-            "activation_code": activation_code,
-            "code": activation_code,
-        }
-
-    @staticmethod
-    def _inactive_state(state, message):
-        state["activated"] = False
-        upper = str(message).upper()
-        if "PENDING" in upper:
-            state["last_status"] = "PENDING"
-        elif "BLOCK" in upper:
-            state["last_status"] = "BLOCKED"
-        elif "REVOK" in upper or "DEACTIV" in upper:
-            state["last_status"] = "DEACTIVATED"
-        else:
-            state["last_status"] = "INACTIVE_SERVER"
+            return None, 'Invalid server response.'
+        status = str(data.get('status') or data.get('license_status') or data.get('message') or '').strip().upper()
+        active_flag = data.get('active')
+        approved_flag = data.get('approved')
+        if active_flag is True or approved_flag is True or status == 'ACTIVE':
+            return True, data.get('message') or 'License active'
+        if status in ('PENDING',):
+            return False, data.get('message') or 'License request is still pending.'
+        if status in ('BLOCKED', 'DEACTIVATED', 'INACTIVE', 'REVOKED', 'REJECTED'):
+            return False, data.get('message') or 'License is not active.'
+        return None, data.get('message') or 'License status could not be verified.'
 
     def activate(self, activation_code):
-        code = str(activation_code or "").strip().upper()
+        code = str(activation_code or '').strip().upper()
         if not code:
-            return False, "Enter the activation code first."
-
-        data, error = self._post_json(
-            VALIDATE_URL, self._license_payload(code))
-        if data is None:
-            return False, error or (
-                "Activation could not be verified by License Hub."
-            )
-
-        active, message = self._status_from_response(data)
-        state = self.load_state()
-        state["activation_code"] = code
-        if active is True:
-            state["activated"] = True
-            state["last_status"] = "ACTIVE"
-            self.save_state(state)
-            return True, message or "Activation successful."
-        if active is False:
-            self._inactive_state(state, message)
-            self.save_state(state)
-            return False, message or "License is not active."
-        return False, message or "License status could not be verified."
+            return False, 'Enter the activation code first.'
+        payload = {
+            'product': PRODUCT_CODE,
+            'product_code': PRODUCT_CODE,
+            'fixed_code': FIXED_CODE,
+            'product_name': PRODUCT_NAME,
+            'plugin': PRODUCT_CODE,
+            'tool': PRODUCT_NAME,
+            'device_id': self.get_device_id(),
+            'activation_code': code,
+            'code': code
+        }
+        last_msg = ''
+        for ep in ['/api/license/validate', '/api/license/status', '/api/activate', '/activate', '/api/license/activate']:
+            url = REQUEST_URL.rstrip('/') + ep if not REQUEST_URL.endswith('/request') else REQUEST_URL.rsplit('/request', 1)[0] + ep
+            data, err = self._post_json(url, payload)
+            if data is not None:
+                ok, msg = self._status_from_response(data)
+                if ok is True:
+                    s = self.load_state()
+                    s['activated'] = True
+                    s['activation_code'] = code
+                    s['last_status'] = 'ACTIVE'
+                    self.save_state(s)
+                    return True, msg or 'Activation successful.'
+                if ok is False:
+                    s = self.load_state()
+                    s['activated'] = False
+                    upper = str(msg).upper()
+                    if 'PENDING' in upper:
+                        s['last_status'] = 'PENDING'
+                    elif 'BLOCK' in upper:
+                        s['last_status'] = 'BLOCKED'
+                    else:
+                        s['last_status'] = 'INACTIVE_SERVER'
+                    self.save_state(s)
+                    return False, msg or 'License is not active.'
+                last_msg = msg or last_msg
+            else:
+                last_msg = err or last_msg
+        return False, 'Activation code could not be verified by License Hub. ' + (last_msg or 'The license synchronization endpoint is not available on the License Hub server.')
 
     def refresh_activation_from_server(self):
-        state = self.load_state()
-        code = str(state.get("activation_code", "")).strip().upper()
+        s = self.load_state()
+        code = str(s.get('activation_code', '')).strip().upper()
         if not code:
-            return None, "No activation code is stored locally yet."
-
-        data, error = self._post_json(STATUS_URL, self._license_payload(code))
-        if data is None:
-            return None, error or "License status could not be confirmed."
-
-        active, message = self._status_from_response(data)
-        if active is True:
-            state["activated"] = True
-            state["last_status"] = "ACTIVE"
-            self.save_state(state)
-            return True, message or "License active."
-        if active is False:
-            self._inactive_state(state, message)
-            self.save_state(state)
-            return False, message or "License is not active."
-        return None, message or "License status could not be confirmed."
+            return None, 'No activation code is stored locally yet.'
+        payload = {
+            'product': PRODUCT_CODE,
+            'product_code': PRODUCT_CODE,
+            'fixed_code': FIXED_CODE,
+            'product_name': PRODUCT_NAME,
+            'plugin': PRODUCT_CODE,
+            'tool': PRODUCT_NAME,
+            'device_id': self.get_device_id(),
+            'activation_code': code,
+            'code': code
+        }
+        last_msg = ''
+        for ep in ['/api/license/status', '/api/license/validate', '/api/activate', '/activate']:
+            url = REQUEST_URL.rstrip('/') + ep if not REQUEST_URL.endswith('/request') else REQUEST_URL.rsplit('/request', 1)[0] + ep
+            data, err = self._post_json(url, payload)
+            if data is not None:
+                ok, msg = self._status_from_response(data)
+                if ok is True:
+                    s['activated'] = True
+                    s['last_status'] = 'ACTIVE'
+                    self.save_state(s)
+                    return True, msg or 'License active.'
+                if ok is False:
+                    s['activated'] = False
+                    upper = str(msg).upper()
+                    if 'PENDING' in upper:
+                        s['last_status'] = 'PENDING'
+                    elif 'BLOCK' in upper:
+                        s['last_status'] = 'BLOCKED'
+                    else:
+                        s['last_status'] = 'INACTIVE_SERVER'
+                    self.save_state(s)
+                    return False, msg or 'License is not active.'
+                last_msg = msg or last_msg
+            else:
+                last_msg = err or last_msg
+        return None, last_msg or 'License status could not be confirmed from the server.'
 
     def can_run(self):
         if self.is_activated_local():
-            active, message = self.refresh_activation_from_server()
-            if active is True:
-                return True, "License is active."
-            return False, message or (
-                "The active license could not be verified."
-            )
+            ok, msg = self.refresh_activation_from_server()
+            if ok is False:
+                return False, msg
+            return True, 'License is active.'
         if self.trial_remaining() > 0:
-            return True, "Trial mode. Remaining trial: %s of %s." % (
-                self.trial_remaining(),
-                TRIAL_LIMIT,
-            )
-        return False, "Trial has expired. Please activate the license."
+            return True, 'Trial mode. Remaining trial: %s of %s.' % (self.trial_remaining(), TRIAL_LIMIT)
+        return False, 'Trial has expired. Please activate the license.'
 
     def consume_trial_for_run(self):
-        state = self.load_state()
-        if state.get("activated", False):
+        s = self.load_state()
+        if s.get('activated', False):
             return True
-        try:
-            used = int(state.get("trial_used", 0) or 0)
-        except (TypeError, ValueError):
-            used = 0
+        used = int(s.get('trial_used', 0) or 0)
         if used >= TRIAL_LIMIT:
-            state["last_status"] = "TRIAL_EXPIRED"
-            self.save_state(state)
+            s['last_status'] = 'TRIAL_EXPIRED'
+            self.save_state(s)
             return False
-        state["trial_used"] = used + 1
-        state["last_status"] = (
-            "TRIAL" if state["trial_used"] < TRIAL_LIMIT else "TRIAL_EXPIRED"
-        )
-        self.save_state(state)
+        s['trial_used'] = used + 1
+        s['last_status'] = 'TRIAL' if s['trial_used'] < TRIAL_LIMIT else 'TRIAL_EXPIRED'
+        self.save_state(s)
         return True
