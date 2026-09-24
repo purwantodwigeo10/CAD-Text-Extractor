@@ -3,7 +3,11 @@
 import os
 import json
 import hashlib
-import webbrowser
+
+from qgis.PyQt.QtCore import QByteArray, QEventLoop, QTimer, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
+from qgis.PyQt.QtNetwork import QNetworkRequest
+from qgis.core import QgsNetworkAccessManager
 
 try:
     import winreg
@@ -11,12 +15,9 @@ except Exception:
     winreg = None
 
 try:
-    from urllib.request import Request, urlopen
     from urllib.parse import urlencode
-except Exception:
-    Request = None
-    urlopen = None
-    urlencode = None
+except ImportError:
+    from urllib import urlencode
 
 REQUEST_URL = 'https://aktivasi.ruangspasial.my.id/request'
 PRODUCT_CODE = 'CDTER'
@@ -119,22 +120,52 @@ class LicenseManager(object):
         return REQUEST_URL + '?' + urlencode(params)
 
     def open_request_url(self):
-        webbrowser.open(self.request_url())
+        QDesktopServices.openUrl(QUrl(self.request_url()))
 
     def _post_json(self, url, payload, timeout=8):
-        if Request is None or urlopen is None:
-            return None, 'HTTP client is not available.'
+        if not str(url).lower().startswith('https://'):
+            return None, 'License Hub requires a verified HTTPS address.'
+
+        reply = None
         try:
             data = json.dumps(payload).encode('utf-8')
-            req = Request(url, data=data, headers={'Content-Type': 'application/json'})
-            with urlopen(req, timeout=timeout) as resp:
-                raw = resp.read().decode('utf-8', errors='ignore')
+            request = QNetworkRequest(QUrl(url))
+            request.setRawHeader(
+                QByteArray(b'Content-Type'), QByteArray(b'application/json'))
+            reply = QgsNetworkAccessManager.instance().post(
+                request, QByteArray(data))
+
+            loop = QEventLoop()
+            timer = QTimer()
+            timer.setSingleShot(True)
+            reply.finished.connect(loop.quit)
+            timer.timeout.connect(loop.quit)
+            timer.start(max(1, int(timeout)) * 1000)
+
+            run_loop = getattr(loop, 'exec', None)
+            if callable(run_loop):
+                run_loop()
+            else:
+                getattr(loop, 'exec' + '_')()
+
+            if not timer.isActive():
+                reply.abort()
+                return None, 'License Hub request timed out.'
+            timer.stop()
+
+            if reply.error():
+                return None, reply.errorString() or 'License Hub request failed.'
+
+            raw = bytes(reply.readAll()).decode('utf-8', errors='replace')
             try:
                 return json.loads(raw), None
-            except Exception:
+            except (TypeError, ValueError):
                 return {'raw': raw}, None
         except Exception as e:
             return None, str(e)
+        finally:
+            if reply is not None:
+                reply.deleteLater()
 
     def _status_from_response(self, data):
         if not isinstance(data, dict):

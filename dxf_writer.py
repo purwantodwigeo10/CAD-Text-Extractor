@@ -168,8 +168,8 @@ class SimpleDxfWriter(object):
             working = QgsGeometry(geom)
             try:
                 working.convertToStraightSegment()
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError, TypeError):
+                working = QgsGeometry(geom)
 
             wkb = working.wkbType()
             geom_type = QgsWkbTypes.geometryType(wkb)
@@ -222,9 +222,10 @@ class SimpleDxfWriter(object):
         if self.f is not None:
             try:
                 self.f.close()
-            except Exception:
-                pass
-            self.f = None
+            except (OSError, ValueError):
+                self._ended = False
+            finally:
+                self.f = None
 
     @staticmethod
     def validate_file(path):
