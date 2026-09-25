@@ -5,7 +5,7 @@ qgisMaximumVersion=3.99
 description=CAD Text Extractor exports selected attribute fields as CAD text and source geometries into a CAD-compatible DXF output.
 version=0.26.01
 author=Dwi Purwanto (Ruang Spasial)
-email=purwantodwigeo10@users.noreply.github.com
+email=ruangspasial@gmail.com
 about=CAD Text Extractor exports source geometries and selected attribute fields to an AutoCAD-compatible DXF file. Polygon text height is assigned automatically from feature area, while multiple text values are stacked around the selected placement point using Middle Center alignment. Live progress from 0 to 100 percent is displayed during export.
 changelog=0.26.01
     - Exports source geometries and selected attributes as CAD-compatible DXF entities.
